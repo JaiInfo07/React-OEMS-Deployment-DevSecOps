@@ -1,0 +1,216 @@
+name: React-Application-CI-CD 
+
+on:
+  workflow_dispatch:
+  push: 
+    branches:
+      main
+
+jobs:
+  Gitleaks-Secrets-Check:
+    runs-on: Runner-1
+
+    steps:
+      - name: checkout step
+        uses: actions/checkout@v4
+
+      - name: gitleaks step
+        uses: gitleaks/gitleaks-action@v2
+
+      - name: gitleaks run
+        run: | 
+          pwd
+          mkdir -p report
+          gitleaks detect --no-git --exit-code 0 --source ./frontend --report-format json --report-path report/Front-log.json 
+          gitleaks detect --no-git --exit-code 0 --source ./backend --report-format json --report-path report/Back-log.json 
+
+  OWASP-Dependency-check:
+    runs-on: Runner-1
+    needs: Gitleaks-Secrets-Check
+    steps:
+      - name: checkout step
+        uses: actions/checkout@v4
+      
+      - name: Run OWASP Dependency-Check-Frontend
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "ReactApp-Frontend"
+          path: "ReactApplication/Frontend"
+          format: "HTML"
+          out: "reports/frontend"
+          
+      - name: Run OWASP Dependency-Check-Backend
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "ReactApp-Backend"
+          path: "ReactApplication/Backend"
+          format: "HTML"
+          out: "reports/backend"
+
+      # - name: fix the issue
+      #   run: sudo chown -R ubuntu:ubuntu reports
+
+      - name: upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OWASP-report
+          path: reports/**
+  
+  SonarQube-Frontend:
+    runs-on: Runner-1
+    needs: OWASP-Dependency-check
+    steps:
+    - name: SonarQube Scan
+      # uses: sonarsource/sonarcloud-github-action@v3
+      uses: SonarSource/sonarqube-scan-action@v5.3.1
+      with:
+        #projectDir: Frontend Dsonar.organization=ilayarajac515
+        args: > 
+          -Dsonar.projectName=React-Frontend
+          -Dsonar.projectKey=React-Frontend
+          -Dsonar.sources=./ReactApplication/Frontend
+          -Dsonar.exclusions=node_modules/**,coverage/**,dist/**
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        
+  SonarQube-Backend:
+    runs-on: Runner-1
+    needs: OWASP-Dependency-check
+    steps:
+    - name: SonarQube Scan
+      # uses: sonarsource/sonarcloud-github-action@v3
+      uses: SonarSource/sonarqube-scan-action@v5.3.1
+      with:
+        #projectDir: Backend -Dsonar.organization=ilayarajac515
+        args: >
+          -Dsonar.projectName=React-Backend
+          -Dsonar.projectKey=React-Backend
+          -Dsonar.sources=./ReactApplication/Backend
+          -Dsonar.exclusions=node_modules/**,coverage/**,dist/**
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  Trivy-FS-Scan:
+    runs-on: Runner-1
+    needs: [SonarQube-Backend,SonarQube-Frontend]
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: TrivyScan
+        uses: aquasecurity/trivy-action@0.28.0
+        with: 
+          scan-type: fs
+          scan-ref: .
+          vuln-type: 'os,library'
+          format: 'table'
+          output: 'trivy-report.table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          
+      - name: Upload Trivy Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.table
+
+  Docker-Frontend-Build:
+    runs-on: Runner-1
+    needs: Trivy-FS-Scan
+    steps:
+      - name: Checkout stage
+        uses: actions/checkout@v4
+        
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: login to dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build and push docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ReactApplication/Frontend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/reactapplication-frontend:latest
+
+
+  Docker-Backend-Build:
+    runs-on: Runner-1
+    needs: Trivy-FS-Scan
+    steps:
+      - name: Checkout stage
+        uses: actions/checkout@v4
+        
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: login to dockerhub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Build and push docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ReactApplication/Backend
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/reactapplication-backend:latest
+
+  trivy_image_scan:
+    runs-on: Runner-1
+    needs: Docker-Frontend-Build
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy image scan for backend
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image              
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/reactapplication-backend:latest
+          format: table
+          exit-code: '0'                 
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          
+      - name: Run Trivy image scan for frontend
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image               
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/reactapplication-frontend:latest
+          format: table
+          exit-code: '0'              
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
+  Kubernetes:
+    runs-on: Runner-1
+    needs: trivy_image_scan
+    environment: Production
+    steps:
+       - name: Checkout stage
+         uses: actions/checkout@v4
+      
+       - name: Configure AWS credentials
+         uses: aws-actions/configure-aws-credentials@v4
+         with:
+            aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws-region: ${{ secrets.AWS_REGION }} 
+
+       - name: Update kubeconfig
+         run: aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+
+       - name: Deploy to EKS
+         run: |
+          kubectl apply -f k8s-files/Deployment.yaml
+          kubectl apply -f k8s-files/Service.yaml
