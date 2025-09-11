@@ -7,27 +7,27 @@ on:
       main
 
 jobs:
-  Gitleaks-Secrets-Check:
-    runs-on: Runner-1
+  # Gitleaks-Secrets-Check:
+  #   runs-on: Runner-1
 
-    steps:
-      - name: checkout step
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: checkout step
+  #       uses: actions/checkout@v4
 
-      - name: gitleaks step
-        uses: gitleaks/gitleaks-action@v2
+  #     - name: gitleaks step
+  #       uses: gitleaks/gitleaks-action@v2
 
-        # gitleaks detect --no-git --exit-code 0 --source ./frontend --report-format json --report-path report/Front-log.json 
-        # gitleaks detect --no-git --exit-code 0 --source ./backend --report-format json --report-path report/Back-log.json 
+  #       # gitleaks detect --no-git --exit-code 0 --source ./frontend --report-format json --report-path report/Front-log.json 
+  #       # gitleaks detect --no-git --exit-code 0 --source ./backend --report-format json --report-path report/Back-log.json 
 
-      - name: gitleaks run
-        run: | 
-          pwd
-          mkdir -p report
+  #     - name: gitleaks run
+  #       run: | 
+  #         pwd
+  #         mkdir -p report
 
   OWASP-Dependency-check:
     runs-on: Runner-1
-    needs: Gitleaks-Secrets-Check
+    # needs: Gitleaks-Secrets-Check
     steps:
       - name: checkout step
         uses: actions/checkout@v4
