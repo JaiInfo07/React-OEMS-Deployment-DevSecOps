@@ -1,4 +1,4 @@
-name: React-Application-CI-CD #For OEMS in DevSecOps Strategy!
+name: React-Application-CI-CD #For OEMS in DevSecOps Method!
 
 on:
   workflow_dispatch:
