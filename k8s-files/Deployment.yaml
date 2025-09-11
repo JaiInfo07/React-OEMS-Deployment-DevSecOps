@@ -28,7 +28,7 @@ kind: Deployment
 metadata:
   name: backend
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: backend
@@ -57,7 +57,7 @@ kind: Deployment
 metadata:
   name: frontend
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: frontend
@@ -71,6 +71,7 @@ spec:
         image: vidocker07/reactapplication-frontend:latest
         ports:
         - containerPort: 80
+
 
 
 
