@@ -118,7 +118,7 @@ jobs:
           path: trivy-report.table
 
   Docker-Frontend-Build:
-    runs-on: Runner-1
+    runs-on: ubuntu:latest
     needs: Trivy-FS-Scan
     steps:
       - name: Checkout stage
