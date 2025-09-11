@@ -48,8 +48,8 @@ jobs:
           format: "HTML"
           out: "reports/backend"
 
-      - name: fix the issue
-        run: sudo chown -R ubuntu:ubuntu reports
+      - name: fix the issue # Used to give ubuntu access to reports instead of Root to delete the report at the time of checkout actions.
+        run: sudo chown -R ubuntu:ubuntu reports 
 
       - name: upload artifact
         uses: actions/upload-artifact@v4
